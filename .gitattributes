@@ -1,0 +1,14 @@
+# The workflow runs on ubuntu-latest. A CRLF line ending in the shell script
+# breaks the shebang ("bad interpreter: /usr/bin/env bash^M"), so pin LF
+# explicitly rather than relying on each machine's autocrlf setting.
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Note: the executable bit is NOT set here. It lives in the git index
+# (100755, via `git update-index --chmod=+x`), which is what a Linux
+# checkout honours. The workflow also runs `chmod +x` before invoking the
+# script, so the run is correct even if the mode is lost.
+.github/scripts/kuzzle-key.sh text eol=lf

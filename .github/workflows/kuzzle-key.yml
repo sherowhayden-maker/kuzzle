@@ -1,0 +1,120 @@
+name: Mint Kuzzle API key
+
+# Manual only, on purpose. Minting credentials is a deliberate act; nothing here
+# runs on push, on schedule, or on PRs from forks.
+on:
+  workflow_dispatch:
+    inputs:
+      index:
+        description: 'Index the key may touch (e.g. sleeps_tmc_dev)'
+        required: true
+        default: sleeps_tmc_dev
+      collection:
+        description: 'Collection, or * for all collections in that index'
+        required: true
+        default: players
+      label:
+        description: 'Short name, e.g. phone or ci'
+        required: true
+        default: devkey
+      expiresIn:
+        description: 'e.g. 12h, 30d. Leave blank for a non-expiring key.'
+        required: false
+        default: ''
+
+# Least privilege: read-only repo access, no packages, no deployments.
+permissions:
+  contents: read
+
+jobs:
+  mint:
+    runs-on: ubuntu-latest
+    # Never let a stray key get echoed into the log.
+    env:
+      KUZZLE_ADMIN_KEY: ${{ secrets.KUZZLE_ADMIN_KEY }}
+      KUZZLE_HOST: ${{ vars.KUZZLE_HOST || '185.172.175.96' }}
+      KUZZLE_PORT: ${{ vars.KUZZLE_PORT || '443' }}
+      KUZZLE_SCHEME: ${{ vars.KUZZLE_SCHEME || 'https' }}
+      IDX: ${{ inputs.index }}
+      COL: ${{ inputs.collection }}
+      LABEL: ${{ inputs.label }}
+      EXPIRES_IN: ${{ inputs.expiresIn }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mint key
+        id: mint
+        outputs:
+          key_id: ${{ steps.mint.outputs.key_id }}
+          kuid: ${{ steps.mint.outputs.kuid }}
+          base: ${{ steps.mint.outputs.base }}
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/kuzzle-key.sh
+          RESULT="$(.github/scripts/kuzzle-key.sh)"
+          printf '%s\n' "$RESULT" > key.json
+
+          TOKEN="$(printf '%s' "$RESULT" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+          KEYID="$(printf '%s' "$RESULT" | sed -n 's/.*"keyId":"\([^"]*\)".*/\1/p')"
+          KUID="$(printf '%s'   "$RESULT" | sed -n 's/.*"kuid":"\([^"]*\)".*/\1/p')"
+
+          # Mask before it can ever be printed.
+          echo "::add-mask::$TOKEN"
+          echo "::add-mask::$(printf '%s' "$RESULT" | sed -n 's/.*"password":"\([^"]*\)".*/\1/p')"
+
+          {
+            echo "key_id=$KEYID"
+            echo "kuid=$KUID"
+            echo "base=$(printf '%s' "$RESULT" | sed -n 's/.*"base":"\([^"]*\)".*/\1/p')"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Minted key $KEYID for ${{ inputs.index }}/${{ inputs.collection }}"
+          echo "Token is masked; it is in the artifact below and nowhere in the log."
+
+      - name: Verify the key is actually scoped
+        run: |
+          set -euo pipefail
+          TOKEN="$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' key.json)"
+          BASE="$(sed -n 's/.*"base":"\([^"]*\)".*/\1/p' key.json)"
+
+          echo "::add-mask::$TOKEN"
+
+          # In scope -> must succeed
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST "$BASE/${{ inputs.index }}/${{ inputs.collection }}/_count" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' --data '{}')
+          echo "  own index/collection -> HTTP $code"
+          [ "$code" = "200" ] || { echo "::error::scoped key cannot read its own index (HTTP $code)"; exit 1; }
+
+          # Out of scope -> must be refused.
+          #
+          # The probe index must be different from the index being scoped,
+          # otherwise the two assertions above contradict each other and the
+          # run fails for a correct key. Plain `A && B=1` would abort under
+          # `set -e` when the test is false, hence the if/else.
+          if [ "${{ inputs.index }}" = "elm-dev" ]; then
+            OTHER=sleeps_tmc_dev
+          else
+            OTHER=elm-dev
+          fi
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST "$BASE/$OTHER/logs/_count" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H 'Content-Type: application/json' --data '{}')
+          echo "  out of scope $OTHER -> HTTP $code"
+          if [ "$code" = "200" ]; then
+            echo "::error::SCOPING FAILED - this key can read $OTHER"
+            exit 1
+          fi
+          echo "  scoping confirmed"
+
+      - name: Upload key
+        uses: actions/upload-artifact@v4
+        with:
+          name: kuzzle-key-${{ inputs.label }}
+          path: key.json
+          retention-days: 1
+          if-no-files-found: error

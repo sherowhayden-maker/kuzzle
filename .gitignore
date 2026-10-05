@@ -1,0 +1,31 @@
+# This repo contains ONE thing: the Kuzzle API key dispenser in .github/
+# Everything below is local FiveM/txAdmin state that must never be committed.
+
+# --- bulk server state -------------------------------------------------------
+# server-data/ is ~17 GB across ~82k files (cached assets, logs, player state).
+server-data/
+
+# --- txAdmin profile ---------------------------------------------------------
+# admins.json holds txAdmin password hashes.
+# playersDB.json / cachedData.json hold player Steam identifiers.
+# logs/ hold full server output.
+txData/
+
+# --- FXServer binaries and bundled txAdmin -----------------------------------
+enhanced/
+
+# --- agent workspace metadata ------------------------------------------------
+.freebuff/
+
+# --- secrets, belt and braces ------------------------------------------------
+# The admin Kuzzle key lives in GitHub Secrets, never in this repo.
+# sv_pre.cfg (in the TMC.TEST profile, not here) also carries one in plaintext.
+*.cfg
+*.env
+key.json
+*.key
+
+# --- OS / editor noise --------------------------------------------------------
+Thumbs.db
+desktop.ini
+.DS_Store
