@@ -1,0 +1,7 @@
+# keep secrets off the repo entirely
+.env
+*.env
+admin-key*
+*.key
+last*.json
+last*.env

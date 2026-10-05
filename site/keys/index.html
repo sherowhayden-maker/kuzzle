@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Generate Kuzzle key</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f6f8fa;color:#24292f;margin:0;padding:24px}
+    main{max-width:680px;margin:0 auto}
+    h1{font-size:22px;margin:0 0 8px}
+    p{margin:0 0 16px;color:#57606a}
+    button{background:#1f6feb;border:1px solid #1f6feb;border-radius:6px;color:#fff;font-weight:600;padding:10px 14px;cursor:pointer;font-size:14px}
+    button:disabled{background:#8c9eb2;border-color:#8c9eb2;cursor:not-allowed}
+    button:hover:not(:disabled){background:#1a5cc6;border-color:#1a5cc6}
+    .token{background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:10px 12px;font-size:12px;word-break:break-all;display:none}
+    .meta{font-size:13px;color:#57606a;margin-top:10px}
+    .err{color:#cf222e;font-size:13px}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Generate Kuzzle API key</h1>
+    <p>Mints a scoped key for <code id="scope"></code>. The token is shown once.</p>
+    <button id="btn">Generate key</button>
+    <div class="meta" id="meta"></div>
+    <pre class="token" id="token"></pre>
+    <div class="err" id="err" hidden></div>
+  </main>
+  <script>
+    const INDEX = '<%= INDEX %>';
+    const COLLECTION = '<%= COLLECTION %>';
+    document.getElementById('scope').textContent = INDEX + '/' + COLLECTION;
+    const btn = document.getElementById('btn');
+    const token = document.getElementById('token');
+    const meta = document.getElementById('meta');
+    const err = document.getElementById('err');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      token.style.display = 'none';
+      err.hidden = true;
+      meta.textContent = 'minting...';
+      try {
+        const res = await fetch('/keys/mint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: '12h' }) });
+        const j = await res.json();
+        if (!res.ok) throw new Error((j && j.message) || 'mint failed');
+        token.textContent = j.token;
+        token.style.display = 'block';
+        meta.textContent = 'key id: ' + (j.keyId || 'n/a') + '  •  expires: ' + (j.expiresIn || 'n/a') + '  •  shown once';
+        if (navigator.clipboard) navigator.clipboard.writeText(j.token).catch(()=>{});
+      } catch (e) {
+        err.hidden = false;
+        err.textContent = e && e.message ? e.message : String(e);
+      } finally {
+        btn.disabled = false;
+        meta.textContent = '';
+      }
+    });
+  </script>
+</body>
+</html>
